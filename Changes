@@ -1,4 +1,11 @@
 Revision history for Perl extension PHP::DateTime.
 
+0.03
+ - More tests.
+ - Fixed mktime.
+ - Docs are expanded a little.
+ - Requires Time::Local.
+
 0.02  Thr Mar 11 12:19 2004
  - First public version.
+

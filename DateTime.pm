@@ -1,53 +1,80 @@
+# vim:noet
 package PHP::DateTime;
+#-------------------------------------------------------------------------------
 
+=head1 NAME
+
+PHP::DateTime - Clone of PHP's date and time functions.
+
+=head1 SYNOPSIS
+
+  use PHP::DateTime;
+  
+  if( checkdate($month,$day,$year) ){ print 'The date is good.'; }
+  
+  print date( $format, $time );
+  print date( $format ); # Defaults to the current time.
+  
+  @d = getdate(); # A list at the current time.
+  @d = getdate($time); # A list at the specified time.
+  $d = getdate($time); # An array ref at the specified time.
+  
+  my @g = gettimeofday(); # A list.
+  my $g = gettimeofday(); # An array ref.
+  
+  my $then = mktime( $hour, $min, $sec, $month, $day, $year );
+
+=head1 DESCRIPTION
+
+Duplicates some of PHP's date and time functions.  Why?  I can't remember. 
+It should be useful if you are trying to integrate your perl app with a php app. 
+Much like PHP this module gratuitously exports all its functions upon a use(). 
+Neat, eh?
+
+=cut
+
+#-------------------------------------------------------------------------------
 use strict;
+use warnings;
 use 5.006;
 
-our $VERSION = '0.02';
-our %cache;
-our %modules;
+use Time::DaysInMonth qw();
+use Time::Timezone qw();
+use Time::HiRes qw();
+use Time::Local qw();
+
+our $VERSION = '0.03';
+
+our $days_short = ['Sun','Mon','Tue','Wed','Thr','Fri','Sat'];
+our $days_long = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+our $months_short = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+our $months_long = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 require Exporter;
 our @ISA = qw(Exporter);
 our @EXPORT = qw(
 	&checkdate &date &getdate &gettimeofday &mktime 
 );
+#-------------------------------------------------------------------------------
 
+=head1 METHODS
 
-#---------------------------------------------------#
-# Private methods.
-#---------------------------------------------------#
+All of these methods should match PHP's methods exactly.
 
-# Loads up miscellaneous data if it has not already been cached in the %cache hash.
-sub load_cache {
-	my $key = shift;
-	if($key eq 'days_short'){ $cache{$key} ||= ['Sun','Mon','Tue','Wed','Thr','Fri','Sat']; }
-	elsif($key eq 'days_long'){ $cache{$key} ||= ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']; }
-	elsif($key eq 'months_short'){ $cache{$key} ||= ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; }
-	elsif($key eq 'months_long'){ $cache{$key} ||= ['January','February','March','April','May','June','July','August','September','October','November','December']; }
-	elsif($key eq 'mktime_args'){ $cache{$key} ||= ['hour','minute','second','day','month','year','dst']; }
-	return $cache{$key};
-}
+  - Months are 1-12.
+  - Days are 1-31.
+  - Years are in four digit format (1997, not 97).
 
-# Loads up a module via require if it hasn't already been loaded.
-# TODO: This code is bogus, there's gotta be a more straight forward global way.
-sub if_require {
-	my $modname = shift;
-	if(!$modules{$modname}){
-		eval('require '.$modname);
-		$modules{$modname}=1;
-	}
-}
+=head2 checkdate
 
-#---------------------------------------------------#
-# Exported/public methods.
-#---------------------------------------------------#
+  if( checkdate($month,$day,$year) ){ print 'The date is good.'; }
 
-# Refer to the PHP documentation for descriptions of these.
+L<http://php.net/manual/en/function.checkdate.php>
 
+=cut
+
+#-------------------------------------------------------------------------------
 sub checkdate {
-	if_require('Time::DaysInMonth');
-
 	my($month,$day,$year) = @_;
 	return (
 		$year>=1 and $year<=32767 and 
@@ -55,7 +82,18 @@ sub checkdate {
 		$day>=1 and $day <= Time::DaysInMonth::days_in($year,$month)
 	);
 }
+#-------------------------------------------------------------------------------
 
+=head2 date
+
+  print date( $format, $time );
+  print date( $format ); # Defaults to the current time.
+
+L<http://php.net/manual/en/function.date.php>
+
+=cut
+
+#-------------------------------------------------------------------------------
 sub date {
 	my $format = shift;
 	my $esecs = (@_?shift():time());
@@ -66,7 +104,6 @@ sub date {
 		elsif($tzoffset=~/^(-?)([0-9]+):([0-9]+)$/s){ $tzoffset=(($1*$2*60)+($1*$3))*60; }
 		else{ $tzoffset+=0; }
 	}else{
-		if_require('Time::Timezone');
 		$tzoffset = Time::Timezone::tz_local_offset();
 	}
 	$esecs += $tzoffset;
@@ -75,8 +112,8 @@ sub date {
 	my $str;
 	my @chars = split(//,$format);
 	foreach (@chars){
-		if($_ eq 'D'){ load_cache('days_short'); $str.=$cache{days_short}->[$times[6]]; }
-		elsif($_ eq 'M'){ load_cache('months_short'); $str.=$cache{months_short}->[$times[4]]; }
+		if($_ eq 'D'){ $str.=$days_short->[$times[6]]; }
+		elsif($_ eq 'M'){ $str.=$months_short->[$times[4]]; }
 		elsif($_ eq 'd'){ $str.=($times[3]<10?'0':'').$times[3]; }
 		elsif($_ eq 'Y'){ $str.=$times[5]+1900; }
 		elsif($_ eq 'g'){ $str.=($times[2]==0?12:$times[2]-($times[2]>12?12:0)); }
@@ -87,133 +124,108 @@ sub date {
 	
 	return $str;
 }
+#-------------------------------------------------------------------------------
 
+=head2 getdate
+
+  @d = getdate(); # A list at the current time.
+  @d = getdate($time); # A list at the specified time.
+  $d = getdate($time); # An array ref at the specified time.
+
+L<http://php.net/manual/en/function.getdate.php>
+
+=cut
+
+#-------------------------------------------------------------------------------
 sub getdate {
 	my($esecs) = (@_?shift():time);
 	my @times = localtime($esecs);
-	load_cache('months_long');
-	load_cache('days_long');
 	@times = (
 		$times[0],$times[1],$times[2],
 		$times[3],$times[6],$times[4]+1,$times[5]+1900,$times[6],
-		$cache{days_long}->[$times[6]],$cache{months_long}->[$times[4]],
+		$days_long->[$times[6]],$months_long->[$times[4]],
 		$esecs
 	);
 	if(wantarray){ return @times; }
 	else{ return [@times]; }
 }
+#-------------------------------------------------------------------------------
 
+=head2 gettimeofday
+
+  my %g = gettimeofday(); # A hash.
+  my $g = gettimeofday(); # An hash ref.
+
+L<http://php.net/manual/en/function.gettimeofday.php>
+
+=cut
+
+#-------------------------------------------------------------------------------
 sub gettimeofday {
-	if_require('Time::HiRes');
-	if_require('Time::Timezone');
-
 	my($sec,$usec) = Time::HiRes::gettimeofday();
 	my $minuteswest = int((-1 * Time::Timezone::tz_local_offset())/60);
 	my $dsttime = ((localtime(time))[8]?1:0);
-	return {sec=>$sec,usec=>$usec,minuteswest=>$minuteswest,dsttime=>$dsttime};
+	my %times = ( sec=>$sec,usec=>$usec,minuteswest=>$minuteswest,dsttime=>$dsttime );
+	if(wantarray){ return %times; }
+	else{ return {%times}; }
 }
+#-------------------------------------------------------------------------------
 
+=head2 mktime
+
+  my $then = mktime( $hour, $min, $sec, $month, $day, $year );
+
+L<http://php.net/manual/en/function.mktime.php>
+
+=cut
+
+#-------------------------------------------------------------------------------
 sub mktime {
-	if_require('Time::ParseDate');
-
-	my @times = localtime(time);
-	my %args = (hour=>$times[2],minute=>$times[1],second=>$times[0],day=>$times[3],month=>$times[4]+1,year=>$times[5]+1900,dst=>-1);
-	my $arg_keys = load_cache('mktime_args');
+	# hour, minute, second, month, day, year, is_dst
+	my $times = [ ( localtime(time) )[2,1,0,4,3,5,8] ];
+	$times->[3]++;
+	$times->[5]+=1900;
 	
-	for(my $i=@$arg_keys-1; $i>=0; $i--){
+	for( my $i=0; $i<@$times; $i++ ){
 		last if(!@_);
-		next if($arg_keys->[$i] eq 'dst' and $_[@_-1]>1);
-		$args{$arg_keys->[$i]} = pop();
+		$times->[$i] = shift;
 	}
 	
-	my $esecs = Time::ParseDate::parsedate(
-		$args{month}.'/'.$args{day}.'/'.$args{year}.' '.
-		$args{hour}.':'.$args{minute}.':'.$args{second}
-	);
-	if($args{dst}==1){
-		$esecs+=60;
-	}elsif($args{dst}==-1){
-		$esecs+=((localtime(time))[8]?60:0);
-	}
+	$times->[3]--;
+	$times->[5]-=1900;
+	my $esecs = Time::Local::timelocal( (@$times)[2,1,0,4,3,5] );
+	if($times->[8]){ $esecs+=60; }
 	
 	return $esecs;
 }
+#-------------------------------------------------------------------------------
 
-#---------------------------------------------------#
-1;
-__END__
+=head1 PREREQUISITES
 
-=head1 NAME
+L<Time::DaysInMonth>
 
-PHP::DateTime - Clone of PHP's date and time functions.
+L<Time::Timezone>
 
-=head1 SYNOPSIS
+L<Time::HiRes>
 
-  use PHP::DateTime;
-  
-  if(checkdate(12,1,1997)){ ... } # Yep
-  if(checkdate(13,1,1997)){ ... } # Nope
-  
-  my $now = time;
-  print date('D M d, Y g:i a',$now);
-  
-  my $d = getdate($now);
-  print $d->[8]; # Print the name of the day. (ex: Monday)
-  
-  my $g = gettimeofday();
-  print $d->{usec}; # Print the number of miliseconds since epoch.
-  
-  my $then = mktime(11,23,45,28,11,2004,-1);
-  print date('D M d, Y g:i a',$then); 
-  # prints: Sun Nov 28, 2004 11:23 am
-
-=head1 DESCRIPTION
-
-Coming soon.
-
-=head1 METHODS
-
-All these are exported in to your namespace.
-
-=head2 CHECKDATE
-
-http://www.php.net/manual/en/function.checkdate.php
-
-=head2 DATE
-
-http://www.php.net/manual/en/function.date.php
-
-=head2 GETDATE
-
-http://www.php.net/manual/en/function.getdate.php
-
-=head2 GETTIMEOFDAY
-
-http://www.php.net/manual/en/function.gettimeofday.php
-
-=head2 MKTIME
-
-http://www.php.net/manual/en/function.mktime.php
-
-=head1 TODO
-
-Tons.
-
-=head1 BUGS
-
-Barely tested.
+L<Time::Local>
 
 =head1 AUTHOR
 
-Copyright (C) 2003 Aran Clary Deltac (CPAN: BLUEFEET)
+Copyright (C) 2003-2005 Aran Clary Deltac (CPAN: BLUEFEET)
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself. 
 
-Address bug reports and comments to: E<lt>aran@bluefeet.netE<gt>. When sending bug reports, 
+Address bug reports and comments to: E<lt>aran@arandeltac.comE<gt>. When sending bug reports, 
 please provide the version of Geo::Distance, the version of Perl, and the name and version of the 
 operating system you are using.  Patches are welcome if you are brave!
 
 =head1 SEE ALSO
 
-http://www.php.net/manual/en/ref.datetime.php
+L<http://php.net/manual/en/ref.datetime.php>
+
+=cut
+
+#-------------------------------------------------------------------------------
+1;

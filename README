@@ -1,4 +1,4 @@
-PHP/DateTime version 0.02
+PHP/DateTime version 0.03
 =========================
 
 Description coming soon.
@@ -12,13 +12,10 @@ To install this module type the following:
    make test
    make install
 
-DEPENDENCIES
-
-There are some.
 
 COPYRIGHT AND LICENCE
 
-Copyright (C) 2004 Aran Clary Deltac
+Copyright (C) 2004-2005 Aran Clary Deltac
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself. 
