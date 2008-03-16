@@ -1,11 +1,19 @@
-use ExtUtils::MakeMaker;
+use strict;
+use warnings;
 
-WriteMakefile(
-	'NAME' => 'PHP::DateTime',
-	'VERSION_FROM' => 'DateTime.pm',
-	'PREREQ_PM' => {},
-	($] >= 5.005 ? (
-		ABSTRACT_FROM => 'DateTime.pm',
-		AUTHOR => 'Aran Clary Deltac <aran@bluefeet.net>'
-	) : ()),
-);
+use inc::Module::Install;
+
+name     'PHP-DateTime';
+perl_version '5.008003';
+all_from 'lib/PHP/DateTime.pm';
+
+requires 'Time::DaysInMonth';
+requires 'Time::Timezone';
+requires 'Time::HiRes';
+requires 'Time::Local';
+
+build_requires 'Test::More' => 0.62;
+
+recommends 'Test::Pod' => 1.22;
+
+WriteAll;
